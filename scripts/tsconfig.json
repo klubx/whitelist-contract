@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+      "module": "commonjs",
+      "target": "es6",
+      "lib": [
+        "es2019"
+      ],
+      "rootDir": "./src",
+      "resolveJsonModule": true,
+      "esModuleInterop": true
+    },
+  }
