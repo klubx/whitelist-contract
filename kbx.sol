@@ -152,10 +152,16 @@ contract KlubX is ERC721A, Ownable {
         _totalWhitelist = totalWhitelist;
     }
 
+    function setWhitelistUsers(bytes32 merkleRoot) external onlyOwner {
+        whitelistMerkleRoot = merkleRoot;
+    }
+
     function setAuthorizedContract(address contractAddress) public onlyOwner {
         _authorizedContracts[contractAddress] = true;
         emit ContractApproved(contractAddress);
     }
+
+    // WITHDRAW
 
     function withdrawAll() public payable onlyOwner {
         require(payable(msg.sender).send(address(this).balance));
