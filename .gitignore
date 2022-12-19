@@ -6,7 +6,7 @@
 /out-tsc
 
 # dependencies
-scripts/node_modules
+/node_modules
 
 # IDEs and editors
 /.idea
@@ -35,16 +35,20 @@ testem.log
 /typings
 
 # System Files
-scripts/.DS_Store
-scripts/Thumbs.db
+.DS_Store
+Thumbs.db
 
 
 
 # Lock dependencies
 
 yarn.lock
-scripts/package-lock.json
+package-lock.json
 
 .env.local
 .env
 .env.prod
+.env.seed
+
+# 
+drop.txt
