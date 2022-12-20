@@ -1,11 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
-
-pragma solidity ^0.8.4;
-
-import "erc721a/contracts/ERC721A.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-
+// SPDX-License-Identifier: MIT
 // BY DAVZER FOR KLUBX
 //               ,--,
 //        ,--.,---.'|
@@ -23,55 +16,43 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 // ;   |,'              :  ,      .-./   | ,'  ;   |/   \  ' |
 // '---'                 `--`----'   `----'    `---'     `--`
 
-contract KlubX is ERC721A, Ownable {
-    event ContractApproved(address indexed contractAddress);
+pragma solidity ^0.8.17;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "https://github.com/ProjectOpenSea/operator-filter-registry/blob/529cceeda9f5f8e28812c20042cc57626f784718/src/DefaultOperatorFilterer.sol";
+import "https://github.com/chiru-labs/ERC721A/blob/2342b592d990a7710faf40fe66cfa1ce61dd2339/contracts/ERC721A.sol";
+
+
+contract KlubX is ERC721A, DefaultOperatorFilterer, Ownable {
     string public _baseTokenURI;
     uint256 public _totalWhitelist;
     uint256 public _itemByWallet = 1;
-    bool public _canBeTransferred = true;
+    bool public _canBeTransferred = false;
     mapping(address => bool) public _authorizedContracts;
-    bytes32 public whitelistMerkleRoot;
+    bytes32 public merkleRoot;
 
-    constructor(string memory baseTokenURI, uint256 totalWhitelist)
-        ERC721A("KlubX", "KBX")
+    constructor(string memory baseTokenURI, uint256 totalWhitelist) ERC721A("KlubX", "KBX")
     {
         _baseTokenURI = baseTokenURI;
         _totalWhitelist = totalWhitelist;
+
+        _authorizedContracts[0x0000000000000000000000000000000000000000] = true; // Allowing aidrop while keeping soulbound feature
     }
 
-    function isWhitelisted(address _user, bytes32[] calldata merkleProof)
-        public
-        view
-        returns (bool)
-    {
-        return
-            MerkleProof.verify(
-                merkleProof,
-                whitelistMerkleRoot,
-                keccak256(abi.encodePacked(_user))
-            );
+    function isWhitelisted(address walletAddress, bytes32[] calldata merkleLeafs) public view returns (bool) {
+        return MerkleProof.verify(merkleLeafs, merkleRoot, keccak256(abi.encodePacked(walletAddress)));
     }
 
-    function airwhitelistdrop(
-        address[] memory whitelisted,
-        bytes32[][] calldata merkleProves
-    ) external payable onlyOwner {
-        require(
-            _canBeTransferred,
-            "ERC721A-KBX: Need to be in an airdrop mode"
-        );
-        require(
-            totalSupply() + _itemByWallet <= _totalWhitelist,
-            "ERC721A-KBX: Only one item per wallet"
-        );
-        for (uint256 a = 0; a < whitelisted.length; a++) {
-            if (
-                numberMinted(whitelisted[a]) + _itemByWallet <= _itemByWallet &&
-                isWhitelisted(whitelisted[a], merkleProves[a])
-            ) {
-                _safeMint(whitelisted[a], _itemByWallet);
-            }
+    function airdropToken(address[] memory whitelisted, bytes32[][] calldata merkleLeafs) external onlyOwner {
+        require(totalSupply() + 1 <= _totalWhitelist, "ERC721A-KBX: Max supply has been reached");
+
+        uint256 length = whitelisted.length;
+        for (uint256 i = 0; i < length; i++) {
+            require(isWhitelisted(whitelisted[i], merkleLeafs[i]), "Address is not whitelisted");
+            require(numberMinted(whitelisted[i]) + _itemByWallet <= _itemByWallet, "Item by wallet has been overflown");
+
+             _safeMint(whitelisted[i], 1);
         }
     }
 
@@ -81,70 +62,22 @@ contract KlubX is ERC721A, Ownable {
         return _baseTokenURI;
     }
 
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public payable virtual override {
-        require(
-            from == address(0) || _authorizedContracts[from],
-            "ERC721A-KBX: Non transferable token"
-        );
-        safeTransferFrom(from, to, tokenId, "");
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory _data
-    ) public payable virtual override {
-        require(
-            from == address(0) || _authorizedContracts[from],
-            "ERC721A-KBX: Non transferable token"
-        );
-        safeTransferFrom(from, to, tokenId, _data);
-    }
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public payable virtual override {
-        require(
-            from == address(0) || _authorizedContracts[from],
-            "ERC721A-KBX: Non transferable token"
-        );
-        transferFrom(from, to, tokenId);
-    }
-
-    function setApprovalForAll(address operator, bool approved)
-        public
-        virtual
-        override
-    {
-        require(
-            _authorizedContracts[operator],
-            "ERC721A-KLBX : Operator not authorized"
-        );
-        setApprovalForAll(operator, approved);
-    }
-
-    function isAuthorizedContract(address contractAddress)
-        public
-        view
-        returns (bool)
-    {
-        return _authorizedContracts[contractAddress];
+    function _beforeTokenTransfers(address from, address to, uint256 startTokenId, uint256 quantity) internal virtual override {
+        require(_canBeTransferred || _authorizedContracts[from], "ERC721A-KBX: Non transferable token");
+        super._beforeTokenTransfers(from, to, startTokenId, quantity);
     }
 
     function numberMinted(address owner) public view returns (uint256) {
         return _numberMinted(owner);
     }
 
+    function _startTokenId() internal view virtual override returns (uint256) {
+        return 1;
+    }
+
     // OWNER
 
-    function setTransfeable(bool canBeTransferred) public onlyOwner {
+    function setTransferable(bool canBeTransferred) public onlyOwner {
         _canBeTransferred = canBeTransferred;
     }
 
@@ -152,18 +85,43 @@ contract KlubX is ERC721A, Ownable {
         _totalWhitelist = totalWhitelist;
     }
 
-    function setWhitelistUsers(bytes32 merkleRoot) external onlyOwner {
-        whitelistMerkleRoot = merkleRoot;
+    function setMerkleRoot(bytes32 newMerkleRoot) external onlyOwner {
+        merkleRoot = newMerkleRoot;
     }
 
     function setAuthorizedContract(address contractAddress) public onlyOwner {
         _authorizedContracts[contractAddress] = true;
-        emit ContractApproved(contractAddress);
     }
 
     // WITHDRAW
 
     function withdrawAll() public payable onlyOwner {
         require(payable(msg.sender).send(address(this).balance));
+    }
+
+    /////////////////////////////
+    // OPENSEA FILTER REGISTRY 
+    /////////////////////////////
+
+    function setApprovalForAll(address operator, bool approved) public override onlyAllowedOperatorApproval(operator) {
+        require(_canBeTransferred || _authorizedContracts[operator], "ERC721A-KLBX : Can't be transferred"); // Additional check on top of OpenSea
+        super.setApprovalForAll(operator, approved);
+    }
+
+    function approve(address operator, uint256 tokenId) public payable override onlyAllowedOperatorApproval(operator) {
+        require(_canBeTransferred || _authorizedContracts[operator], "ERC721A-KLBX : Can't be transferred"); // Additional check on top of OpenSea
+        super.approve(operator, tokenId);
+    }
+
+    function transferFrom(address from, address to, uint256 tokenId) public payable override onlyAllowedOperator(from) {
+        super.transferFrom(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) public payable override onlyAllowedOperator(from) {
+        super.safeTransferFrom(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public payable override onlyAllowedOperator(from) {
+        super.safeTransferFrom(from, to, tokenId, data);
     }
 }
